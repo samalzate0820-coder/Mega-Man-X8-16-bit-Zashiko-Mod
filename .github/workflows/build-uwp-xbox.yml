@@ -144,6 +144,9 @@ jobs:
           Export-PfxCertificate -Cert $cert -FilePath "temporary-signing.pfx" -Password $securePassword | Out-Null
           Export-Certificate -Cert $cert -FilePath "signed/MegaManX8Zashiko.cer" | Out-Null
 
+          # Trust this temporary self-signed certificate on the build runner before policy verification.
+          Import-Certificate -FilePath "signed/MegaManX8Zashiko.cer" -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+
           & $env:SIGNTOOL sign /fd SHA256 /a /f "temporary-signing.pfx" /p $password "signed/MegaManX8Zashiko.appx"
           if ($LASTEXITCODE -ne 0) { throw "SignTool failed to sign the rebuilt APPX package." }
           & $env:SIGNTOOL verify /pa /v "signed/MegaManX8Zashiko.appx"
