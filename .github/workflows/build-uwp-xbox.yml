@@ -69,7 +69,7 @@ jobs:
           $sdkRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
           $sdk = Get-ChildItem $sdkRoot -Directory |
             Where-Object { $_.Name -match '^10\.' } |
-            Sort-Object { [version]($_.Name -replace '^10\.', '') } -Descending |
+            Sort-Object { [version]$_.Name } -Descending |
             Select-Object -First 1
           if (-not $sdk) { throw "Windows 10 SDK was not found." }
           $makeappx = Join-Path $sdk.FullName "x64\makeappx.exe"
