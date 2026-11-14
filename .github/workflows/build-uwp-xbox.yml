@@ -28,6 +28,17 @@ jobs:
           use_godot_3: true
           use_preset_export_path: true
 
+      - name: Normalize exported package path
+        shell: bash
+        run: |
+          appx_path="$(find build/uwp -type f -name '*.appx' -print -quit)"
+          if [ -z "$appx_path" ]; then
+            echo "Godot did not produce an APPX package."
+            find build/uwp -maxdepth 4 -type f -print
+            exit 1
+          fi
+          cp "$appx_path" build/uwp/MegaManX8Zashiko.appx
+
       - name: Confirm package exists
         run: test -s build/uwp/MegaManX8Zashiko.appx
 
