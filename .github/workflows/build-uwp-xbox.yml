@@ -153,8 +153,8 @@ jobs:
           }
           Write-Host "SIGNING_DIAG: importing certificate into CurrentUser Root"
           Import-Certificate -FilePath "signed/MegaManX8Zashiko.cer" -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
-          "::add-mask::$password" >> $env:GITHUB_ENV
-          "SIGNING_PFX_PASSWORD=$password" >> $env:GITHUB_ENV
+          Write-Output "::add-mask::$password"
+          Add-Content -Path $env:GITHUB_ENV -Value "SIGNING_PFX_PASSWORD=$password"
           Write-Host "SIGNING_DIAG: certificate preparation completed"
 
       - name: Sign APPX package
