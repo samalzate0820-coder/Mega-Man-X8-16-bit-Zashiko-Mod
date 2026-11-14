@@ -84,33 +84,45 @@ jobs:
         run: |
           $source = Get-ChildItem -Path "incoming" -Filter "*.appx" -Recurse | Select-Object -First 1
           if (-not $source) { throw "The unsigned APPX package was not found." }
+
+          # Godot 3.5 can emit an APPX whose block map MakeAppx cannot parse.
+          # APPX is a ZIP container: extract its payload without trusting the old block map,
+          # then let MakeAppx generate fresh package metadata and a valid block map.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $unpacked = Join-Path $PWD "appx-content"
           New-Item -ItemType Directory -Force -Path $unpacked | Out-Null
-          & $env:MAKEAPPX unpack /p $source.FullName /d $unpacked /o
-          if ($LASTEXITCODE -ne 0) { throw "MakeAppx could not unpack the Godot APPX package." }
-
-          # MakeAppx regenerates package metadata when rebuilding.
-          Remove-Item -LiteralPath (Join-Path $unpacked "AppxBlockMap.xml") -Force -ErrorAction SilentlyContinue
-          Remove-Item -LiteralPath (Join-Path $unpacked "[Content_Types].xml") -Force -ErrorAction SilentlyContinue
-          Remove-Item -LiteralPath (Join-Path $unpacked "AppxSignature.p7x") -Force -ErrorAction SilentlyContinue
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($source.FullName, $unpacked)
 
           $manifest = Join-Path $unpacked "AppxManifest.xml"
-          if (-not (Test-Path $manifest)) { throw "AppxManifest.xml is missing from Godot export." }
+          if (-not (Test-Path -LiteralPath $manifest)) {
+            throw "AppxManifest.xml is missing from the Godot export."
+          }
+
           [xml]$manifestXml = Get-Content -LiteralPath $manifest -Raw
           $manifestPublisher = [string]$manifestXml.Package.Identity.Publisher
           if ($manifestPublisher -ne "CN=SamAlzate") {
             throw "Package publisher '$manifestPublisher' does not match the signing certificate subject 'CN=SamAlzate'."
           }
+
+          # Remove package-generated files; MakeAppx creates fresh versions.
+          @("AppxBlockMap.xml", "[Content_Types].xml", "AppxSignature.p7x") | ForEach-Object {
+            $metadata = Join-Path $unpacked $_
+            if (Test-Path -LiteralPath $metadata) {
+              Remove-Item -LiteralPath $metadata -Force
+            }
+          }
+
           $package = Join-Path $PWD "MegaManX8Zashiko-unsigned.appx"
           & $env:MAKEAPPX pack /d $unpacked /p $package /o
-          if ($LASTEXITCODE -ne 0) { throw "MakeAppx could not rebuild the APPX package." }
-          # MakeAppx pack performs its built-in package validation unless /nv is specified.
-          if (-not (Test-Path -LiteralPath $package) -or (Get-Item -LiteralPath $package).Length -le 0) {
-            throw "MakeAppx did not produce a valid non-empty APPX package."
+          if ($LASTEXITCODE -ne 0) {
+            throw "MakeAppx could not rebuild the APPX package from the extracted Godot payload."
           }
-          New-Item -ItemType Directory -Force -Path "signed" | Out-Null
-          Copy-Item $package "signed/MegaManX8Zashiko.appx"
+          if (-not (Test-Path -LiteralPath $package) -or (Get-Item -LiteralPath $package).Length -le 0) {
+            throw "MakeAppx did not produce a non-empty APPX package."
+          }
 
+          New-Item -ItemType Directory -Force -Path "signed" | Out-Null
+          Copy-Item -LiteralPath $package -Destination "signed/MegaManX8Zashiko.appx"
       - name: Create temporary signing certificate and sign package
         shell: pwsh
         run: |
