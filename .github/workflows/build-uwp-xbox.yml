@@ -31,16 +31,17 @@ jobs:
       - name: Normalize exported package path
         shell: bash
         run: |
+          set -euo pipefail
           appx_path="$(find build/uwp -type f -name '*.appx' -print -quit)"
           if [ -z "$appx_path" ]; then
             echo "Godot did not produce an APPX package."
-            find build/uwp -maxdepth 4 -type f -print
+            find build/uwp -maxdepth 5 -type f -print
             exit 1
           fi
-          cp "$appx_path" build/uwp/MegaManX8Zashiko.appx
-
-      - name: Confirm package exists
-        run: test -s build/uwp/MegaManX8Zashiko.appx
+          if [ "$appx_path" != "build/uwp/MegaManX8Zashiko.appx" ]; then
+            cp "$appx_path" build/uwp/MegaManX8Zashiko.appx
+          fi
+          test -s build/uwp/MegaManX8Zashiko.appx
 
       - name: Upload unsigned UWP package
         uses: actions/upload-artifact@v4
@@ -48,9 +49,10 @@ jobs:
           name: uwp-unsigned
           path: build/uwp/MegaManX8Zashiko.appx
           if-no-files-found: error
+          retention-days: 7
 
   sign:
-    name: Sign package for Developer Mode sideloading
+    name: Repackage, validate and sign UWP package
     needs: export
     runs-on: windows-latest
     steps:
@@ -58,9 +60,50 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: uwp-unsigned
-          path: package
+          path: incoming
 
-      - name: Create temporary test certificate and sign package
+      - name: Locate Windows SDK tools
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
+          $sdk = Get-ChildItem $sdkRoot -Directory |
+            Where-Object { $_.Name -match '^10\.' } |
+            Sort-Object { [version]($_.Name -replace '^10\.', '') } -Descending |
+            Select-Object -First 1
+          if (-not $sdk) { throw "Windows 10 SDK was not found." }
+          $makeappx = Join-Path $sdk.FullName "x64\makeappx.exe"
+          $signtool = Join-Path $sdk.FullName "x64\signtool.exe"
+          if (-not (Test-Path $makeappx)) { throw "MakeAppx.exe was not found: $makeappx" }
+          if (-not (Test-Path $signtool)) { throw "SignTool.exe was not found: $signtool" }
+          "MAKEAPPX=$makeappx" >> $env:GITHUB_ENV
+          "SIGNTOOL=$signtool" >> $env:GITHUB_ENV
+
+      - name: Rebuild package with MakeAppx
+        shell: pwsh
+        run: |
+          $source = Get-ChildItem -Path "incoming" -Filter "*.appx" -Recurse | Select-Object -First 1
+          if (-not $source) { throw "The unsigned APPX package was not found." }
+          $unpacked = Join-Path $PWD "appx-content"
+          New-Item -ItemType Directory -Force -Path $unpacked | Out-Null
+          Expand-Archive -LiteralPath $source.FullName -DestinationPath $unpacked -Force
+
+          # MakeAppx generates these package metadata files itself.
+          Remove-Item -LiteralPath (Join-Path $unpacked "AppxBlockMap.xml") -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath (Join-Path $unpacked "[Content_Types].xml") -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath (Join-Path $unpacked "AppxSignature.p7x") -Force -ErrorAction SilentlyContinue
+
+          $manifest = Join-Path $unpacked "AppxManifest.xml"
+          if (-not (Test-Path $manifest)) { throw "AppxManifest.xml is missing from Godot export." }
+          $package = Join-Path $PWD "MegaManX8Zashiko-unsigned.appx"
+          & $env:MAKEAPPX pack /d $unpacked /p $package /o
+          if ($LASTEXITCODE -ne 0) { throw "MakeAppx could not rebuild the APPX package." }
+          & $env:MAKEAPPX validate /p $package
+          if ($LASTEXITCODE -ne 0) { throw "MakeAppx validation failed." }
+          New-Item -ItemType Directory -Force -Path "signed" | Out-Null
+          Copy-Item $package "signed/MegaManX8Zashiko.appx"
+
+      - name: Create temporary signing certificate and sign package
         shell: pwsh
         run: |
           $subject = "CN=SamAlzate"
@@ -68,31 +111,25 @@ jobs:
             -Type Custom `
             -Subject $subject `
             -KeyUsage DigitalSignature `
-            -FriendlyName "Mega Man X8 Zashiko UWP Test" `
+            -FriendlyName "Mega Man X8 Zashiko UWP Developer Mode" `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
           $password = [Guid]::NewGuid().ToString("N")
           $securePassword = ConvertTo-SecureString -String $password -Force -AsPlainText
-          Export-PfxCertificate -Cert $cert -FilePath "test-signing.pfx" -Password $securePassword | Out-Null
-          Export-Certificate -Cert $cert -FilePath "MegaManX8Zashiko.cer" | Out-Null
+          Export-PfxCertificate -Cert $cert -FilePath "temporary-signing.pfx" -Password $securePassword | Out-Null
+          Export-Certificate -Cert $cert -FilePath "signed/MegaManX8Zashiko.cer" | Out-Null
 
-          $appx = Get-ChildItem -Path "package" -Filter "*.appx" -Recurse | Select-Object -First 1
-          if (-not $appx) { throw "The exported APPX package was not found." }
-
-          $sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
-            Where-Object Name -Match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $sdk) { throw "Windows 10 SDK not found on runner." }
-          $signtool = Join-Path $sdk.FullName "x64\signtool.exe"
-          if (-not (Test-Path $signtool)) { throw "signtool.exe not found." }
-
-          & $signtool sign /fd SHA256 /a /f "test-signing.pfx" /p $password $appx.FullName
-          if ($LASTEXITCODE -ne 0) { throw "APPX signing failed." }
+          & $env:SIGNTOOL sign /fd SHA256 /a /f "temporary-signing.pfx" /p $password "signed/MegaManX8Zashiko.appx"
+          if ($LASTEXITCODE -ne 0) { throw "SignTool failed to sign the rebuilt APPX package." }
+          & $env:SIGNTOOL verify /pa /v "signed/MegaManX8Zashiko.appx"
+          if ($LASTEXITCODE -ne 0) { throw "SignTool signature verification failed." }
 
       - name: Upload signed package and public certificate
         uses: actions/upload-artifact@v4
         with:
           name: xbox-devmode-package
           path: |
-            package/*.appx
-            MegaManX8Zashiko.cer
+            signed/MegaManX8Zashiko.appx
+            signed/MegaManX8Zashiko.cer
           if-no-files-found: error
+          retention-days: 30
