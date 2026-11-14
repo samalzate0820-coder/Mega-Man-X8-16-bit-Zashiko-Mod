@@ -55,6 +55,7 @@ jobs:
     name: Repackage, validate and sign UWP package
     needs: export
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: Download unsigned package
         uses: actions/download-artifact@v4
@@ -123,13 +124,15 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path "signed" | Out-Null
           Copy-Item -LiteralPath $package -Destination "signed/MegaManX8Zashiko.appx"
-      - name: Create temporary signing certificate and sign package
+      - name: Create temporary signing certificate
         shell: pwsh
+        timeout-minutes: 3
         run: |
-          $subject = "CN=SamAlzate"
+          $ErrorActionPreference = "Stop"
+          Write-Host "SIGNING_DIAG: starting certificate creation"
           $cert = New-SelfSignedCertificate `
             -Type Custom `
-            -Subject $subject `
+            -Subject "CN=SamAlzate" `
             -KeyAlgorithm RSA `
             -KeyLength 2048 `
             -HashAlgorithm SHA256 `
@@ -139,18 +142,47 @@ jobs:
             -FriendlyName "Mega Man X8 Zashiko UWP Developer Mode" `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3,1.3.6.1.4.1.311.10.3.13", "2.5.29.19={text}")
+          if (-not $cert) { throw "New-SelfSignedCertificate returned no certificate." }
+          Write-Host "SIGNING_DIAG: certificate created; exporting PFX and CER"
           $password = [Guid]::NewGuid().ToString("N")
           $securePassword = ConvertTo-SecureString -String $password -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath "temporary-signing.pfx" -Password $securePassword | Out-Null
           Export-Certificate -Cert $cert -FilePath "signed/MegaManX8Zashiko.cer" | Out-Null
-
-          # Trust this temporary self-signed certificate on the build runner before policy verification.
+          if (-not (Test-Path "temporary-signing.pfx") -or -not (Test-Path "signed/MegaManX8Zashiko.cer")) {
+            throw "The temporary signing certificate files were not exported."
+          }
+          Write-Host "SIGNING_DIAG: importing certificate into CurrentUser Root"
           Import-Certificate -FilePath "signed/MegaManX8Zashiko.cer" -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+          "::add-mask::$password" >> $env:GITHUB_ENV
+          "SIGNING_PFX_PASSWORD=$password" >> $env:GITHUB_ENV
+          Write-Host "SIGNING_DIAG: certificate preparation completed"
 
-          & $env:SIGNTOOL sign /fd SHA256 /a /f "temporary-signing.pfx" /p $password "signed/MegaManX8Zashiko.appx"
-          if ($LASTEXITCODE -ne 0) { throw "SignTool failed to sign the rebuilt APPX package." }
+      - name: Sign APPX package
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = "Stop"
+          $package = "signed/MegaManX8Zashiko.appx"
+          if (-not (Test-Path $package)) { throw "APPX package to sign was not found." }
+          if (-not (Test-Path "temporary-signing.pfx")) { throw "Temporary PFX signing key was not found." }
+          Write-Host "SIGNING_DIAG: invoking SignTool sign"
+          & $env:SIGNTOOL sign /fd SHA256 /f "temporary-signing.pfx" /p $env:SIGNING_PFX_PASSWORD /v $package
+          $signExit = $LASTEXITCODE
+          Write-Host "SIGNING_DIAG: SignTool sign exit code: $signExit"
+          if ($signExit -ne 0) { throw "SignTool failed to sign the rebuilt APPX package (exit code $signExit)." }
+          Write-Host "SIGNING_DIAG: APPX signing completed"
+
+      - name: Verify APPX signature
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "SIGNING_DIAG: invoking SignTool verify"
           & $env:SIGNTOOL verify /pa /v "signed/MegaManX8Zashiko.appx"
-          if ($LASTEXITCODE -ne 0) { throw "SignTool signature verification failed." }
+          $verifyExit = $LASTEXITCODE
+          Write-Host "SIGNING_DIAG: SignTool verify exit code: $verifyExit"
+          if ($verifyExit -ne 0) { throw "SignTool signature verification failed (exit code $verifyExit)." }
+          Write-Host "SIGNING_DIAG: signature verification completed"
 
       - name: Upload signed package and public certificate
         uses: actions/upload-artifact@v4
