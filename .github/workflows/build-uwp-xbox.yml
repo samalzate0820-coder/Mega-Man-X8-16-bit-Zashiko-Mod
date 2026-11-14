@@ -151,11 +151,23 @@ jobs:
           if (-not (Test-Path "temporary-signing.pfx") -or -not (Test-Path "signed/MegaManX8Zashiko.cer")) {
             throw "The temporary signing certificate files were not exported."
           }
-          Write-Host "SIGNING_DIAG: importing certificate into CurrentUser Root"
-          Import-Certificate -FilePath "signed/MegaManX8Zashiko.cer" -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
           Write-Output "::add-mask::$password"
           Add-Content -Path $env:GITHUB_ENV -Value "SIGNING_PFX_PASSWORD=$password"
-          Write-Host "SIGNING_DIAG: certificate preparation completed"
+          Write-Host "SIGNING_DIAG: certificate files exported and preparation completed"
+
+      - name: Trust temporary signing certificate
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          $ErrorActionPreference = "Stop"
+          $certificate = "signed/MegaManX8Zashiko.cer"
+          if (-not (Test-Path $certificate)) { throw "Public signing certificate was not found." }
+          Write-Host "SIGNING_DIAG: adding certificate to CurrentUser Root with certutil"
+          & certutil.exe -addstore -f Root $certificate
+          $trustExit = $LASTEXITCODE
+          Write-Host "SIGNING_DIAG: certutil exit code: $trustExit"
+          if ($trustExit -ne 0) { throw "certutil could not add the signing certificate to the trusted root store." }
+          Write-Host "SIGNING_DIAG: certificate trust import completed"
 
       - name: Sign APPX package
         shell: pwsh
