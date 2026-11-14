@@ -23,6 +23,12 @@ func get_aspect_ratio():
 	return Configurations.get("Aspect")
 
 func _ready() -> void :
+	if Tools.is_console_platform():
+		focus_mode = Control.FOCUS_NONE
+		var row = get_parent()
+		if row:
+			row.visible = false
+		return
 	if CharacterManager.is_Android():
 		replace_option_android()
 	else:
@@ -33,6 +39,8 @@ func fullscreen_changed(key) -> void :
 		display()
 
 func setup() -> void :
+	if Tools.is_console_platform():
+		return
 	if CharacterManager.is_Android():
 		set_aspect_ratio(get_aspect_ratio())
 	else:
@@ -40,6 +48,8 @@ func setup() -> void :
 	display()
 
 func increase_value() -> void :
+	if Tools.is_console_platform():
+		return
 	if CharacterManager.is_Android():
 		current_aspect_index = (current_aspect_index + 1) %aspect_options.size()
 		set_aspect_ratio(aspect_options[current_aspect_index])
@@ -48,6 +58,8 @@ func increase_value() -> void :
 		display()
 
 func decrease_value() -> void :
+	if Tools.is_console_platform():
+		return
 	if CharacterManager.is_Android():
 		current_aspect_index = (current_aspect_index - 1 + aspect_options.size()) %aspect_options.size()
 		set_aspect_ratio(aspect_options[current_aspect_index])
