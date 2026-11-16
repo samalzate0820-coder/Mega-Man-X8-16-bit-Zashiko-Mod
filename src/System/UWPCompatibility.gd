@@ -42,6 +42,7 @@ func _process(_delta: float) -> void:
 		if sprite_gpu.emitting and not sprite_bridge.was_emitting:
 			_spawn_enemy_death_sprite_burst(sprite_gpu)
 			sprite_bridge.was_emitting = true
+			_sprite_particle_bridges[index] = sprite_bridge
 		elif not sprite_gpu.emitting:
 			sprite_bridge.was_emitting = false
 			_sprite_particle_bridges[index] = sprite_bridge
@@ -362,7 +363,10 @@ func _create_enemy_explosion_sprite_bridge(gpu: Particles2D) -> void:
 	_sprite_particle_bridges.append({"gpu": gpu, "was_emitting": false})
 	if gpu.emitting:
 		_spawn_enemy_death_sprite_burst(gpu)
-		_sprite_particle_bridges[_sprite_particle_bridges.size() - 1].was_emitting = true
+		var bridge_index := _sprite_particle_bridges.size() - 1
+		var bridge: Dictionary = _sprite_particle_bridges[bridge_index]
+		bridge.was_emitting = true
+		_sprite_particle_bridges[bridge_index] = bridge
 	diag("created sprite-sheet explosion fallback source=%s amount=%d texture=%s" % [gpu.name, gpu.amount, str(gpu.texture)])
 
 func _spawn_enemy_death_sprite_burst(gpu: Particles2D) -> void:
