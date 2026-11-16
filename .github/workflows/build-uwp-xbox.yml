@@ -2,6 +2,9 @@ name: Build UWP package for Xbox Series S
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - uwp-xbox-series-port
 
 permissions:
   contents: read
