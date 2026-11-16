@@ -367,6 +367,12 @@ func _create_cpu_particle_bridge(gpu: Particles2D) -> void:
 	cpu.convert_from_particles(gpu)
 	cpu.texture = gpu.texture
 	cpu.material = gpu.material
+	if gpu.process_material is ParticlesMaterial:
+		var source_particles := gpu.process_material as ParticlesMaterial
+		cpu.anim_speed = source_particles.anim_speed
+		cpu.anim_speed_random = source_particles.anim_speed_random
+		cpu.anim_offset = source_particles.anim_offset
+		cpu.anim_offset_random = source_particles.anim_offset_random
 	gpu.get_parent().add_child(cpu)
 	cpu.transform = gpu.transform
 	cpu.visible = gpu.visible
@@ -381,6 +387,7 @@ func _create_cpu_particle_bridge(gpu: Particles2D) -> void:
 		cpu.restart()
 		cpu.emitting = true
 	_particle_bridges.append({"gpu": gpu, "cpu": cpu, "was_emitting": gpu.emitting})
+	diag("created CPU particle fallback source=%s texture=%s animated=%s" % [gpu.name, str(gpu.texture), str(cpu.material is CanvasItemMaterial and (cpu.material as CanvasItemMaterial).particles_animation)])
 
 func _replace_incompatible_material(node: Node) -> void:
 	if !(node is CanvasItem) or !(node.material is ShaderMaterial):
@@ -388,13 +395,13 @@ func _replace_incompatible_material(node: Node) -> void:
 	var material := node.material as ShaderMaterial
 	if not material.shader:
 		return
+	var original_shader_path := material.shader.resource_path
 	_configure_palette_size(material)
-	match material.shader.resource_path:
+	match original_shader_path:
 		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
 			material.shader = _character_shader
 			_replaced += 1
-			if _replaced <= 12:
-				diag("replaced character visual shader path=%s" % material.shader.resource_path)
+			diag("replaced unsupported character shader path=%s" % original_shader_path)
 		"res://src/Actors/charge_shader.tres":
 			material.shader = _charge_shader
 			_replaced += 1
