@@ -457,7 +457,7 @@ func _replace_incompatible_material(node: Node) -> void:
 			material.shader = _character_shader
 			_replaced += 1
 			diag("replaced unsupported character shader path=%s" % original_shader_path)
-		"res://src/Actors/charge_shader.tres":
+		"res://src/Actors/Player/charge_shader.tres", "res://src/Actors/charge_shader.tres":
 			material.shader = _charge_shader
 			_replaced += 1
 		"res://src/Effects/enemy_shader.tres":
