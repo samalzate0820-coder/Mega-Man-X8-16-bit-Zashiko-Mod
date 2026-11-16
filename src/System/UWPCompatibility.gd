@@ -463,7 +463,7 @@ func _replace_incompatible_material(node: Node) -> void:
 		diag("replaced Zero visual shader material=%s shader=%s" % [material_path, original_shader_path])
 		return
 
-match original_shader_path:
+	match original_shader_path:
 		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
 			material.shader = _character_shader
 			_replaced += 1
