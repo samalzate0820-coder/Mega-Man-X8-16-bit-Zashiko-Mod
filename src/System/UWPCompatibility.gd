@@ -317,6 +317,8 @@ func _prepare_cpu_particles(node: Node) -> void:
 		_create_charge_animation(node)
 		return
 	if _is_enemy_explosion_particle(node):
+		# Hide the unsupported GPU emitter; EnemyDeath._Setup starts the
+		# deterministic CPU sprite sequence at the exact moment of the death.
 		_create_enemy_explosion_sprite_bridge(node)
 		return
 	node.set_meta("uwp_cpu_bridge", true)
@@ -358,14 +360,25 @@ func _create_enemy_explosion_sprite_bridge(gpu: Particles2D) -> void:
 	var hidden_color := gpu.self_modulate
 	hidden_color.a = 0.0
 	gpu.self_modulate = hidden_color
-	_sprite_particle_bridges.append({"gpu": gpu, "was_emitting": false})
-	if gpu.emitting:
-		_spawn_enemy_death_sprite_burst(gpu)
-		var bridge_index := _sprite_particle_bridges.size() - 1
-		var bridge: Dictionary = _sprite_particle_bridges[bridge_index]
-		bridge.was_emitting = true
-		_sprite_particle_bridges[bridge_index] = bridge
-	diag("created sprite-sheet explosion fallback source=%s amount=%d texture=%s" % [gpu.name, gpu.amount, str(gpu.texture)])
+	# Do not poll the GPU emitter's emitting flag: it can change before the
+	# compatibility process observes it. EnemyDeath calls the fallback directly.
+	diag("prepared CPU sprite explosion fallback source=%s amount=%d texture=%s" % [gpu.name, gpu.amount, str(gpu.texture)])
+
+func spawn_enemy_death_effect(source: Particles2D) -> void:
+	if not _active or not is_instance_valid(source):
+		return
+	if source.has_meta("uwp_enemy_death_sequence"):
+		return
+	source.set_meta("uwp_enemy_death_sequence", true)
+	var hidden_color := source.self_modulate
+	hidden_color.a = 0.0
+	source.self_modulate = hidden_color
+	var spread := 25.0
+	if source.process_material is ParticlesMaterial:
+		spread = max((source.process_material as ParticlesMaterial).emission_sphere_radius, 1.0)
+	var duration := max(source.lifetime, 0.55)
+	spawn_explosion_sequence(source, max(source.amount, 1), spread, duration, 1.0, duration, source.texture)
+	diag("started deterministic CPU explosion sequence source=%s amount=%d texture=%s duration=%.2f" % [source.name, source.amount, str(source.texture), duration])
 
 func _spawn_enemy_death_sprite_burst(gpu: Particles2D) -> void:
 	if not is_instance_valid(gpu):
@@ -445,12 +458,19 @@ func _replace_incompatible_material(node: Node) -> void:
 	var original_shader_path := material.shader.resource_path
 	var material_path := material.resource_path
 	_configure_palette_size(material)
-	# Identify the actual player sprite by its owning player script as well as
-	# resource paths. Exported UWP resources can lose their original path names.
+	# Match Zero by the actual scene hierarchy first. The exported UWP build
+	# can omit script resource_path metadata, so script-only detection is fragile.
+	var zero_owner := node.get_parent()
+	if node.name == "animatedSprite" and is_instance_valid(zero_owner) and zero_owner.name == "Zero":
+		material.shader = _character_shader
+		_replaced += 1
+		diag("replaced Zero sprite by scene identity with UWP canvas shader")
+		return
+	# Keep the script-path check as a secondary route for renamed scenes.
 	if _is_player_sprite(node, "res://Zero_mod/Player/PlayerZero.gd"):
 		material.shader = _character_shader
 		_replaced += 1
-		diag("replaced Zero player sprite with UWP canvas shader")
+		diag("replaced Zero player sprite by script identity with UWP canvas shader")
 		return
 	if _is_player_sprite(node, "res://src/Actors/Player/X/PlayerX.gd"):
 		material.shader = _charge_shader
