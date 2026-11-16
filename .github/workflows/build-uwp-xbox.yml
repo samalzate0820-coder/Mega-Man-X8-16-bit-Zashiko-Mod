@@ -80,11 +80,11 @@ jobs:
           "MAKEAPPX=$makeappx" >> $env:GITHUB_ENV
           "SIGNTOOL=$signtool" >> $env:GITHUB_ENV
 
-      - name: Rebuild package with MakeAppx
+      - name: Rebuild package as MSIX with MakeAppx
         shell: pwsh
         run: |
           $source = Get-ChildItem -Path "incoming" -Filter "*.appx" -Recurse | Select-Object -First 1
-          if (-not $source) { throw "The unsigned APPX package was not found." }
+          if (-not $source) { throw "The unsigned Godot APPX input package was not found." }
 
           # Godot 3.5 can emit an APPX whose block map MakeAppx cannot parse.
           # APPX is a ZIP container: extract its payload without trusting the old block map,
@@ -113,7 +113,7 @@ jobs:
             }
           }
 
-          $package = Join-Path $PWD "MegaManX8Zashiko-unsigned.appx"
+          $package = Join-Path $PWD "MegaManX8Zashiko-unsigned.msix"
           & $env:MAKEAPPX pack /d $unpacked /p $package /o
           if ($LASTEXITCODE -ne 0) {
             throw "MakeAppx could not rebuild the APPX package from the extracted Godot payload."
@@ -123,7 +123,7 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path "signed" | Out-Null
-          Copy-Item -LiteralPath $package -Destination "signed/MegaManX8Zashiko.appx"
+          Copy-Item -LiteralPath $package -Destination "signed/MegaManX8Zashiko.msix"
       - name: Create temporary signing certificate
         shell: pwsh
         timeout-minutes: 3
@@ -169,28 +169,28 @@ jobs:
           if ($trustExit -ne 0) { throw "certutil could not add the signing certificate to the trusted root store." }
           Write-Host "SIGNING_DIAG: certificate trust import completed"
 
-      - name: Sign APPX package
+      - name: Sign MSIX package
         shell: pwsh
         timeout-minutes: 5
         run: |
           $ErrorActionPreference = "Stop"
-          $package = "signed/MegaManX8Zashiko.appx"
-          if (-not (Test-Path $package)) { throw "APPX package to sign was not found." }
+          $package = "signed/MegaManX8Zashiko.msix"
+          if (-not (Test-Path $package)) { throw "MSIX package to sign was not found." }
           if (-not (Test-Path "temporary-signing.pfx")) { throw "Temporary PFX signing key was not found." }
           Write-Host "SIGNING_DIAG: invoking SignTool sign"
           & $env:SIGNTOOL sign /fd SHA256 /f "temporary-signing.pfx" /p $env:SIGNING_PFX_PASSWORD /v $package
           $signExit = $LASTEXITCODE
           Write-Host "SIGNING_DIAG: SignTool sign exit code: $signExit"
-          if ($signExit -ne 0) { throw "SignTool failed to sign the rebuilt APPX package (exit code $signExit)." }
+          if ($signExit -ne 0) { throw "SignTool failed to sign the rebuilt MSIX package (exit code $signExit)." }
           Write-Host "SIGNING_DIAG: APPX signing completed"
 
-      - name: Verify APPX signature
+      - name: Verify MSIX signature
         shell: pwsh
         timeout-minutes: 3
         run: |
           $ErrorActionPreference = "Stop"
           Write-Host "SIGNING_DIAG: invoking SignTool verify"
-          & $env:SIGNTOOL verify /pa /v "signed/MegaManX8Zashiko.appx"
+          & $env:SIGNTOOL verify /pa /v "signed/MegaManX8Zashiko.msix"
           $verifyExit = $LASTEXITCODE
           Write-Host "SIGNING_DIAG: SignTool verify exit code: $verifyExit"
           if ($verifyExit -ne 0) { throw "SignTool signature verification failed (exit code $verifyExit)." }
@@ -201,7 +201,7 @@ jobs:
         with:
           name: xbox-devmode-package
           path: |
-            signed/MegaManX8Zashiko.appx
+            signed/MegaManX8Zashiko.msix
             signed/MegaManX8Zashiko.cer
           if-no-files-found: error
           retention-days: 30
