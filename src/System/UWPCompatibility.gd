@@ -10,6 +10,7 @@ var _palette_shader := Shader.new()
 var _character_shader := Shader.new()
 var _replaced := 0
 var _particle_bridges := []
+var _sprite_particle_bridges := []
 var _charge_animations := {}
 var _charge_animation_script := preload("res://src/System/UWPChargeAnimation.gd")
 var _sprite_explosion_script := preload("res://src/System/UWPSpriteExplosion.gd")
@@ -32,6 +33,18 @@ func _ready() -> void:
 	set_process(true)
 
 func _process(_delta: float) -> void:
+	for index in range(_sprite_particle_bridges.size() - 1, -1, -1):
+		var sprite_bridge: Dictionary = _sprite_particle_bridges[index]
+		var sprite_gpu = sprite_bridge.gpu
+		if not is_instance_valid(sprite_gpu):
+			_sprite_particle_bridges.remove(index)
+			continue
+		if sprite_gpu.emitting and not sprite_bridge.was_emitting:
+			_spawn_enemy_death_sprite_burst(sprite_gpu)
+			sprite_bridge.was_emitting = true
+		elif not sprite_gpu.emitting:
+			sprite_bridge.was_emitting = false
+			_sprite_particle_bridges[index] = sprite_bridge
 	for index in range(_particle_bridges.size() - 1, -1, -1):
 		var bridge: Dictionary = _particle_bridges[index]
 		var gpu = bridge.gpu
@@ -302,6 +315,9 @@ func _prepare_cpu_particles(node: Node) -> void:
 	if _is_charge_particle(node):
 		_create_charge_animation(node)
 		return
+	if _is_enemy_explosion_particle(node):
+		_create_enemy_explosion_sprite_bridge(node)
+		return
 	node.set_meta("uwp_cpu_bridge", true)
 	call_deferred("_create_cpu_particle_bridge", node)
 
@@ -328,6 +344,35 @@ func _disable_shader_cache(node: Node) -> void:
 
 func _is_charge_particle(node: Node) -> bool:
 	return node.name == "ChargingParticle" or node.name == "ChargedParticle" or node.name == "SuperChargeParticle"
+
+func _is_enemy_explosion_particle(node: Node) -> bool:
+	if node.name != "Explosion Particles" or not (node is Particles2D):
+		return false
+	if not node.texture:
+		return false
+	return node.texture.resource_path == "res://src/Effects/Textures/explosion.png"
+
+func _create_enemy_explosion_sprite_bridge(gpu: Particles2D) -> void:
+	if gpu.has_meta("uwp_sprite_explosion_bridge"):
+		return
+	gpu.set_meta("uwp_sprite_explosion_bridge", true)
+	var hidden_color := gpu.self_modulate
+	hidden_color.a = 0.0
+	gpu.self_modulate = hidden_color
+	_sprite_particle_bridges.append({"gpu": gpu, "was_emitting": false})
+	if gpu.emitting:
+		_spawn_enemy_death_sprite_burst(gpu)
+		_sprite_particle_bridges[_sprite_particle_bridges.size() - 1].was_emitting = true
+	diag("created sprite-sheet explosion fallback source=%s amount=%d texture=%s" % [gpu.name, gpu.amount, str(gpu.texture)])
+
+func _spawn_enemy_death_sprite_burst(gpu: Particles2D) -> void:
+	if not is_instance_valid(gpu):
+		return
+	var spread := 25.0
+	if gpu.process_material is ParticlesMaterial:
+		spread = max((gpu.process_material as ParticlesMaterial).emission_sphere_radius, 1.0)
+	spawn_explosion_burst(gpu.global_position, max(gpu.amount, 1), spread, 0.56, 1.0, 0.0, gpu.texture)
+	diag("spawned sprite-sheet enemy explosion pos=%s amount=%d spread=%.2f" % [str(gpu.global_position), gpu.amount, spread])
 
 func _create_charge_animation(gpu: Particles2D) -> void:
 	if gpu.has_meta("uwp_charge_animation"):
@@ -396,7 +441,13 @@ func _replace_incompatible_material(node: Node) -> void:
 	if not material.shader:
 		return
 	var original_shader_path := material.shader.resource_path
+	var material_path := material.resource_path
 	_configure_palette_size(material)
+	if material_path == "res://Zero_mod/Sprites/Zero_Material_Shader.tres" or original_shader_path == "res://Zero_mod/Sprites/zero_sprite_shader.tres":
+		material.shader = _character_shader
+		_replaced += 1
+		diag("replaced Zero visual shader material=%s shader=%s" % [material_path, original_shader_path])
+		return
 	match original_shader_path:
 		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
 			material.shader = _character_shader
