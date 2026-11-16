@@ -58,7 +58,7 @@ func _process(_delta: float) -> void:
 		if not is_instance_valid(cpu):
 			_particle_bridges.remove(index)
 			continue
-		cpu.transform = gpu.transform
+		cpu.global_transform = gpu.global_transform
 		cpu.visible = gpu.visible
 		cpu.modulate = gpu.modulate
 		cpu.z_index = gpu.z_index
@@ -181,17 +181,137 @@ func _should_run() -> bool:
 
 func _create_fallback_shaders() -> void:
 	_character_shader.code = """shader_type canvas_item;
-uniform float Flash = 0.0;
-uniform float Darken = 1.0;
-uniform float Alpha = 1.0;
-uniform float Should_Blink = 0.0;
-uniform float Alpha_Blink = 0.0;
-void fragment() {
-	vec4 tex = texture(TEXTURE, UV);
-	float blink = mix(1.0, step(0.5, abs(cos(TIME * 60.0)) - 0.3), clamp(Alpha_Blink, 0.0, 1.0));
-	vec3 color = mix(tex.rgb * Darken, vec3(1.0), clamp(Flash, 0.0, 1.0));
-	COLOR = vec4(color, tex.a * max(Alpha, 0.0) * blink) * COLOR;
-}"""
+	uniform float Flash = 0.0;
+	uniform float Darken = 1.0;
+	uniform float Alpha = 1.0;
+	uniform float Should_Blink = 0.0;
+	uniform float Alpha_Blink = 0.0;
+	uniform float Charge = 0.0;
+	uniform vec4 Color : hint_color = vec4(0.0);
+	uniform float Alert = 0.0;
+	uniform float Glow = 1.0;
+	uniform float tolerance = 0.01;
+	uniform vec4 MainColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor1 : hint_color = vec4(0.0);
+	uniform vec4 MainColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor2 : hint_color = vec4(0.0);
+	uniform vec4 MainColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor3 : hint_color = vec4(0.0);
+	uniform vec4 MainColor4 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor4 : hint_color = vec4(0.0);
+	uniform vec4 MainColor5 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor5 : hint_color = vec4(0.0);
+	uniform vec4 MainColor6 : hint_color = vec4(0.0);
+	uniform vec4 R_MainColor6 : hint_color = vec4(0.0);
+	uniform vec4 CrystalColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_CrystalColor1 : hint_color = vec4(0.0);
+	uniform vec4 CrystalColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_CrystalColor2 : hint_color = vec4(0.0);
+	uniform vec4 CrystalColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_CrystalColor3 : hint_color = vec4(0.0);
+	uniform vec4 OutlineColor : hint_color = vec4(0.0);
+	uniform vec4 R_OutlineColor : hint_color = vec4(0.0);
+	uniform vec4 GreenColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_GreenColor1 : hint_color = vec4(0.0);
+	uniform vec4 GreenColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_GreenColor2 : hint_color = vec4(0.0);
+	uniform vec4 SaberColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_SaberColor1 : hint_color = vec4(0.0);
+	uniform vec4 SaberColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_SaberColor2 : hint_color = vec4(0.0);
+	uniform vec4 SaberColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_SaberColor3 : hint_color = vec4(0.0);
+	uniform vec4 SaberColor4 : hint_color = vec4(0.0);
+	uniform vec4 R_SaberColor4 : hint_color = vec4(0.0);
+	uniform vec4 SaberColor5 : hint_color = vec4(0.0);
+	uniform vec4 R_SaberColor5 : hint_color = vec4(0.0);
+	uniform vec4 HairColor : hint_color = vec4(0.0);
+	uniform vec4 R_HairColor : hint_color = vec4(0.0);
+	uniform vec4 LightRedColor : hint_color = vec4(0.0);
+	uniform vec4 R_LightRedColor : hint_color = vec4(0.0);
+	uniform vec4 AuraColor : hint_color = vec4(0.0);
+	uniform vec4 R_AuraColor : hint_color = vec4(0.0);
+	uniform vec4 ChestColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_ChestColor1 : hint_color = vec4(0.0);
+	uniform vec4 ChestColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_ChestColor2 : hint_color = vec4(0.0);
+	uniform vec4 ChestColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_ChestColor3 : hint_color = vec4(0.0);
+	uniform vec4 ArmorColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_ArmorColor1 : hint_color = vec4(0.0);
+	uniform vec4 ArmorColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_ArmorColor2 : hint_color = vec4(0.0);
+	uniform vec4 ArmorColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_ArmorColor3 : hint_color = vec4(0.0);
+	uniform vec4 GreyColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_GreyColor1 : hint_color = vec4(0.0);
+	uniform vec4 GreyColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_GreyColor2 : hint_color = vec4(0.0);
+	uniform vec4 GreyColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_GreyColor3 : hint_color = vec4(0.0);
+	uniform vec4 GreyColor4 : hint_color = vec4(0.0);
+	uniform vec4 R_GreyColor4 : hint_color = vec4(0.0);
+	uniform vec4 SkinColor1 : hint_color = vec4(0.0);
+	uniform vec4 R_SkinColor1 : hint_color = vec4(0.0);
+	uniform vec4 SkinColor2 : hint_color = vec4(0.0);
+	uniform vec4 R_SkinColor2 : hint_color = vec4(0.0);
+	uniform vec4 SkinColor3 : hint_color = vec4(0.0);
+	uniform vec4 R_SkinColor3 : hint_color = vec4(0.0);
+	uniform vec4 LightHairColor : hint_color = vec4(0.0);
+	uniform vec4 R_LightHairColor : hint_color = vec4(0.0);
+	
+	bool same_color(vec3 a, vec3 b) {
+	    vec3 diff = abs(a - b);
+	    return max(max(diff.r, diff.g), diff.b) <= tolerance;
+	}
+	vec3 replace_character_color(vec3 source) {
+		if (same_color(source, MainColor1.rgb)) { return R_MainColor1.rgb; }
+		if (same_color(source, MainColor2.rgb)) { return R_MainColor2.rgb; }
+		if (same_color(source, MainColor3.rgb)) { return R_MainColor3.rgb; }
+		if (same_color(source, MainColor4.rgb)) { return R_MainColor4.rgb; }
+		if (same_color(source, MainColor5.rgb)) { return R_MainColor5.rgb; }
+		if (same_color(source, MainColor6.rgb)) { return R_MainColor6.rgb; }
+		if (same_color(source, CrystalColor1.rgb)) { return R_CrystalColor1.rgb; }
+		if (same_color(source, CrystalColor2.rgb)) { return R_CrystalColor2.rgb; }
+		if (same_color(source, CrystalColor3.rgb)) { return R_CrystalColor3.rgb; }
+		if (same_color(source, OutlineColor.rgb)) { return R_OutlineColor.rgb; }
+		if (same_color(source, GreenColor1.rgb)) { return R_GreenColor1.rgb; }
+		if (same_color(source, GreenColor2.rgb)) { return R_GreenColor2.rgb; }
+		if (same_color(source, SaberColor1.rgb)) { return R_SaberColor1.rgb; }
+		if (same_color(source, SaberColor2.rgb)) { return R_SaberColor2.rgb; }
+		if (same_color(source, SaberColor3.rgb)) { return R_SaberColor3.rgb; }
+		if (same_color(source, SaberColor4.rgb)) { return R_SaberColor4.rgb; }
+		if (same_color(source, SaberColor5.rgb)) { return R_SaberColor5.rgb; }
+		if (same_color(source, HairColor.rgb)) { return R_HairColor.rgb; }
+		if (same_color(source, LightRedColor.rgb)) { return R_LightRedColor.rgb; }
+		if (same_color(source, AuraColor.rgb)) { return R_AuraColor.rgb; }
+		if (same_color(source, ChestColor1.rgb)) { return R_ChestColor1.rgb; }
+		if (same_color(source, ChestColor2.rgb)) { return R_ChestColor2.rgb; }
+		if (same_color(source, ChestColor3.rgb)) { return R_ChestColor3.rgb; }
+		if (same_color(source, ArmorColor1.rgb)) { return R_ArmorColor1.rgb; }
+		if (same_color(source, ArmorColor2.rgb)) { return R_ArmorColor2.rgb; }
+		if (same_color(source, ArmorColor3.rgb)) { return R_ArmorColor3.rgb; }
+		if (same_color(source, GreyColor1.rgb)) { return R_GreyColor1.rgb; }
+		if (same_color(source, GreyColor2.rgb)) { return R_GreyColor2.rgb; }
+		if (same_color(source, GreyColor3.rgb)) { return R_GreyColor3.rgb; }
+		if (same_color(source, GreyColor4.rgb)) { return R_GreyColor4.rgb; }
+		if (same_color(source, SkinColor1.rgb)) { return R_SkinColor1.rgb; }
+		if (same_color(source, SkinColor2.rgb)) { return R_SkinColor2.rgb; }
+		if (same_color(source, SkinColor3.rgb)) { return R_SkinColor3.rgb; }
+		if (same_color(source, LightHairColor.rgb)) { return R_LightHairColor.rgb; }
+	    return source;
+	}
+	void fragment() {
+	    vec4 tex = texture(TEXTURE, UV);
+	    vec3 base = replace_character_color(tex.rgb);
+	    float blink = mix(1.0, step(0.5, abs(cos(TIME * 60.0)) - 0.3), clamp(Alpha_Blink, 0.0, 1.0));
+	    float flash_pulse = step(0.5, abs(cos(TIME * 42.0)) - 0.3);
+	    vec3 color = mix(base * Darken, vec3(1.0), clamp(Flash, 0.0, 1.0));
+	    color = mix(color, max(color, Color.rgb * max(Glow, 0.0)), clamp(Charge * flash_pulse, 0.0, 1.0));
+	    float alert_pulse = mix(1.0, cos(TIME * 8.5) + 1.4, clamp(Alert * 1.5, 0.0, 1.0));
+	    color *= alert_pulse;
+	    COLOR = vec4(color, tex.a * max(Alpha, 0.0) * blink) * COLOR;
+	}"""
 
 	_charge_shader.code = """shader_type canvas_item;
 uniform float Flash = 0.0;
@@ -424,9 +544,29 @@ func _create_cpu_particle_bridge(gpu: Particles2D) -> void:
 		return
 	var cpu := CPUParticles2D.new()
 	cpu.name = gpu.name + " UWP CPU"
-	cpu.convert_from_particles(gpu)
+	if gpu.process_material is ParticlesMaterial:
+		cpu.convert_from_particles(gpu)
+	else:
+		# CPUParticles2D cannot translate a custom particle ShaderMaterial.
+		# Keep the effect alive with a conservative CPU emitter rather than
+		# invoking convert_from_particles() on an unsupported material type.
+		cpu.amount = max(gpu.amount, 1)
+		cpu.lifetime = max(gpu.lifetime, 0.05)
+		cpu.one_shot = gpu.one_shot
+		cpu.explosiveness = gpu.explosiveness
+		cpu.speed_scale = gpu.speed_scale
+		cpu.preprocess = gpu.preprocess
+		cpu.local_coords = gpu.local_coords
+		cpu.direction = Vector2(0, -1)
+		cpu.spread = 180.0
+		cpu.gravity = Vector2.ZERO
+		cpu.initial_velocity = 24.0
+		cpu.initial_velocity_random = 1.0
 	cpu.texture = gpu.texture
-	cpu.material = gpu.material
+	if gpu.material is CanvasItemMaterial:
+		cpu.material = gpu.material
+	else:
+		cpu.material = null
 	if gpu.process_material is ParticlesMaterial:
 		var source_particles := gpu.process_material as ParticlesMaterial
 		cpu.anim_speed = source_particles.anim_speed
@@ -440,14 +580,16 @@ func _create_cpu_particle_bridge(gpu: Particles2D) -> void:
 	cpu.self_modulate = gpu.self_modulate
 	cpu.z_index = gpu.z_index
 	cpu.z_as_relative = gpu.z_as_relative
+	var initially_emitting := gpu.emitting
+	cpu.emitting = initially_emitting
+	if initially_emitting:
+		cpu.restart()
 	var hidden_color := gpu.self_modulate
 	hidden_color.a = 0.0
 	gpu.self_modulate = hidden_color
-	if gpu.emitting:
-		cpu.restart()
-		cpu.emitting = true
-	_particle_bridges.append({"gpu": gpu, "cpu": cpu, "was_emitting": gpu.emitting})
-	diag("created CPU particle fallback source=%s texture=%s animated=%s" % [gpu.name, str(gpu.texture), str(cpu.material is CanvasItemMaterial and (cpu.material as CanvasItemMaterial).particles_animation)])
+	# Register idle emitters too; they are commonly activated later by abilities.
+	_particle_bridges.append({"gpu": gpu, "cpu": cpu, "was_emitting": initially_emitting})
+	diag("created CPU particle fallback source=%s texture=%s process_material=%s initially_emitting=%s animated=%s" % [gpu.name, str(gpu.texture), str(gpu.process_material), str(initially_emitting), str(cpu.material is CanvasItemMaterial and (cpu.material as CanvasItemMaterial).particles_animation)])
 
 func _replace_incompatible_material(node: Node) -> void:
 	if !(node is CanvasItem) or !(node.material is ShaderMaterial):
@@ -467,17 +609,17 @@ func _replace_incompatible_material(node: Node) -> void:
 		diag("replaced Zero sprite by scene identity with UWP canvas shader")
 		return
 	# Keep the script-path check as a secondary route for renamed scenes.
-	if _is_player_sprite(node, "res://Zero_mod/Player/PlayerZero.gd"):
+	if _is_player_sprite(node, "res://Zero_mod/Player/PlayerZero.gd") or _is_player_sprite(node, "res://Zero_mod/X8/Player/PlayerZeroX8.gd"):
 		material.shader = _character_shader
 		_replaced += 1
-		diag("replaced Zero player sprite by script identity with UWP canvas shader")
+		diag("replaced Zero player sprite (Beta/X8) by script identity with UWP canvas shader")
 		return
 	if _is_player_sprite(node, "res://src/Actors/Player/X/PlayerX.gd"):
 		material.shader = _charge_shader
 		_replaced += 1
 		diag("replaced X player sprite with UWP charge shader")
 		return
-	if material_path == "res://Zero_mod/Sprites/Zero_Material_Shader.tres" or original_shader_path == "res://Zero_mod/Sprites/zero_sprite_shader.tres":
+	if material_path == "res://Zero_mod/Sprites/Zero_Material_Shader.tres" or material_path == "res://Zero_mod/X8/Sprites/ZeroX8_Material_Shader.tres" or original_shader_path == "res://Zero_mod/Sprites/zero_sprite_shader.tres" or original_shader_path == "res://Zero_mod/X8/Sprites/zeroX8_sprite_shader.tres":
 		material.shader = _character_shader
 		_replaced += 1
 		diag("replaced Zero visual shader material=%s shader=%s" % [material_path, original_shader_path])
