@@ -7,6 +7,7 @@ extends Node
 var _charge_shader := Shader.new()
 var _enemy_shader := Shader.new()
 var _palette_shader := Shader.new()
+var _character_shader := Shader.new()
 var _replaced := 0
 var _particle_bridges := []
 var _charge_animations := {}
@@ -165,6 +166,19 @@ func _should_run() -> bool:
 	return OS.has_feature("UWP") or OS.get_name() == "UWP"
 
 func _create_fallback_shaders() -> void:
+	_character_shader.code = """shader_type canvas_item;
+uniform float Flash = 0.0;
+uniform float Darken = 1.0;
+uniform float Alpha = 1.0;
+uniform float Should_Blink = 0.0;
+uniform float Alpha_Blink = 0.0;
+void fragment() {
+	vec4 tex = texture(TEXTURE, UV);
+	float blink = mix(1.0, step(0.5, abs(cos(TIME * 60.0)) - 0.3), clamp(Alpha_Blink, 0.0, 1.0));
+	vec3 color = mix(tex.rgb * Darken, vec3(1.0), clamp(Flash, 0.0, 1.0));
+	COLOR = vec4(color, tex.a * max(Alpha, 0.0) * blink) * COLOR;
+}"""
+
 	_charge_shader.code = """shader_type canvas_item;
 uniform float Flash = 0.0;
 uniform float Charge = 0.0;
@@ -376,6 +390,11 @@ func _replace_incompatible_material(node: Node) -> void:
 		return
 	_configure_palette_size(material)
 	match material.shader.resource_path:
+		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
+			material.shader = _character_shader
+			_replaced += 1
+			if _replaced <= 12:
+				diag("replaced character visual shader path=%s" % material.shader.resource_path)
 		"res://src/Actors/charge_shader.tres":
 			material.shader = _charge_shader
 			_replaced += 1
