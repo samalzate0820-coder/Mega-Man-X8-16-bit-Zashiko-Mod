@@ -463,15 +463,7 @@ func _replace_incompatible_material(node: Node) -> void:
 		diag("replaced Zero visual shader material=%s shader=%s" % [material_path, original_shader_path])
 		return
 
-func _is_player_sprite(node: Node, expected_script_path: String) -> bool:
-	if node.name != "animatedSprite" or not (node is AnimatedSprite):
-		return false
-	var owner := node.get_parent()
-	if not is_instance_valid(owner):
-		return false
-	var owner_script = owner.get_script()
-	return owner_script != null and owner_script.resource_path == expected_script_path
-	match original_shader_path:
+match original_shader_path:
 		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
 			material.shader = _character_shader
 			_replaced += 1
@@ -489,6 +481,15 @@ func _is_player_sprite(node: Node, expected_script_path: String) -> bool:
 			material.shader = _palette_shader
 			_configure_palette_size(material)
 			_replaced += 1
+
+func _is_player_sprite(node: Node, expected_script_path: String) -> bool:
+	if node.name != "animatedSprite" or not (node is AnimatedSprite):
+		return false
+	var owner := node.get_parent()
+	if not is_instance_valid(owner):
+		return false
+	var owner_script = owner.get_script()
+	return owner_script != null and owner_script.resource_path == expected_script_path
 
 func _configure_palette_size(material: ShaderMaterial) -> void:
 	if not material:
