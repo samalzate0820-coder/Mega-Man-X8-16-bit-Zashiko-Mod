@@ -347,11 +347,9 @@ func _is_charge_particle(node: Node) -> bool:
 	return node.name == "ChargingParticle" or node.name == "ChargedParticle" or node.name == "SuperChargeParticle"
 
 func _is_enemy_explosion_particle(node: Node) -> bool:
-	if node.name != "Explosion Particles" or not (node is Particles2D):
-		return false
-	if not node.texture:
-		return false
-	return node.texture.resource_path == "res://src/Effects/Textures/explosion.png"
+	# The exported UWP resource may not retain the original texture path.
+	# The scene node name is stable in both QuickEnemyDeath and LongEnemyDeath.
+	return node is Particles2D and node.name == "Explosion Particles" and node.texture != null
 
 func _create_enemy_explosion_sprite_bridge(gpu: Particles2D) -> void:
 	if gpu.has_meta("uwp_sprite_explosion_bridge"):
@@ -447,11 +445,32 @@ func _replace_incompatible_material(node: Node) -> void:
 	var original_shader_path := material.shader.resource_path
 	var material_path := material.resource_path
 	_configure_palette_size(material)
+	# Identify the actual player sprite by its owning player script as well as
+	# resource paths. Exported UWP resources can lose their original path names.
+	if _is_player_sprite(node, "res://Zero_mod/Player/PlayerZero.gd"):
+		material.shader = _character_shader
+		_replaced += 1
+		diag("replaced Zero player sprite with UWP canvas shader")
+		return
+	if _is_player_sprite(node, "res://src/Actors/Player/X/PlayerX.gd"):
+		material.shader = _charge_shader
+		_replaced += 1
+		diag("replaced X player sprite with UWP charge shader")
+		return
 	if material_path == "res://Zero_mod/Sprites/Zero_Material_Shader.tres" or original_shader_path == "res://Zero_mod/Sprites/zero_sprite_shader.tres":
 		material.shader = _character_shader
 		_replaced += 1
 		diag("replaced Zero visual shader material=%s shader=%s" % [material_path, original_shader_path])
 		return
+
+func _is_player_sprite(node: Node, expected_script_path: String) -> bool:
+	if node.name != "animatedSprite" or not (node is AnimatedSprite):
+		return false
+	var owner := node.get_parent()
+	if not is_instance_valid(owner):
+		return false
+	var owner_script = owner.get_script()
+	return owner_script != null and owner_script.resource_path == expected_script_path
 	match original_shader_path:
 		"res://Zero_mod/Sprites/zero_sprite_shader.tres", "res://Axl_mod/Player/Effects/Axl_sprite_shader.tres":
 			material.shader = _character_shader
