@@ -34,6 +34,8 @@ func _Setup() -> void :
 	if should_emit_kill_signal:
 		Event.emit_signal("enemy_kill", character)
 	explosions.emitting = true
+	if UWPCompatibility.is_active():
+		UWPCompatibility.spawn_enemy_death_effect(explosions)
 	sprite.playing = false
 	sprite.material.set_shader_param("Alpha_Blink", 1)
 	extra_actions_at_death_start()
